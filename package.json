@@ -1,0 +1,76 @@
+{
+  "name": "shajghor-be",
+  "version": "1.0.0",
+  "description": "Backend for Shajghor (Parlour Management System)",
+  "type": "module",
+  "main": "index.js",
+  "imports": {
+    "#common/*": "./common/*",
+    "#config/*": "./config/*",
+    "#models/*": "./models/*",
+    "#modules/*": "./modules/*",
+    "#routes/*": "./routes/*",
+    "#utils/*": "./utils/*",
+    "#lib/*": "./lib/*"
+  },
+  "scripts": {
+    "dev": "nodemon index.js",
+    "start": "cross-env ENV=dev node index.js",
+    "start-qa": "cross-env ENV=qa node index.js",
+    "test": "echo \"Error: no test specified\" && exit 1"
+  },
+  "engines": {
+    "node": ">=18"
+  },
+  "keywords": [],
+  "author": "",
+  "license": "ISC",
+  "dependencies": {
+    "bcryptjs": "^3.0.2",
+    "body-parser": "^2.2.0",
+    "bottleneck": "^2.19.5",
+    "cors": "^2.8.5",
+    "cross-env": "^7.0.3",
+    "dotenv": "^16.4.5",
+    "exceljs": "^4.4.0",
+    "express": "^5.1",
+    "express-mongo-sanitize": "^2.2.0",
+    "helmet": "^8.1.0",
+    "http-errors": "^2.0.0",
+    "json2csv": "^6.0.0-alpha.2",
+    "jsonwebtoken": "^9.0.2",
+    "lodash": "^4.17.21",
+    "mime-types": "^3.0.1",
+    "mongoose": "^8.8.1",
+    "mongoose-aggregate-paginate-v2": "^1.1.4",
+    "mongoose-paginate-v2": "^1.9.0",
+    "multer": "^2.0.1",
+    "node-cron": "^4.1.0",
+    "nodemailer": "^7.0.3",
+    "qs": "^6.14.0",
+    "swagger-jsdoc": "^6.2.8",
+    "swagger-ui-express": "^5.0.1",
+    "tough-cookie": "^5.1.2",
+    "user-agents": "^1.1.374",
+    "uuid": "^11.0.3",
+    "winston": "^3.17.0",
+    "winston-daily-rotate-file": "^5.0.0",
+    "xss": "^1.0.15",
+    "xss-clean": "^0.1.4",
+    "zod": "^3.24.2",
+    "zod-to-json-schema": "^3.24.4"
+  },
+  "devDependencies": {
+    "@eslint/js": "^9.14.0",
+    "babel-cli": "^6.26.0",
+    "babel-preset-env": "^0.0.0",
+    "eslint": "^9.14.0",
+    "globals": "^16.2.0",
+    "nodemon": "^3.1.7"
+  },
+  "babel": {
+    "presets": [
+      "env"
+    ]
+  }
+}
