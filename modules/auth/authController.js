@@ -5,7 +5,6 @@ import crypto from "crypto";
 import jwt from "jsonwebtoken";
 import config from "#config/index.js";
 import { sendEmail } from "#utils/email.js";
-import createError from "http-errors";
 import User from "#modules/auth/user.model.js";
 import { generateTokens } from "#utils/generateToken.js";
 

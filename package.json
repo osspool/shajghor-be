@@ -15,8 +15,7 @@
   },
   "scripts": {
     "dev": "nodemon index.js",
-    "start": "cross-env ENV=dev node index.js",
-    "start-qa": "cross-env ENV=qa node index.js",
+    "start": "node index.js",
     "test": "echo \"Error: no test specified\" && exit 1"
   },
   "engines": {
@@ -36,14 +35,12 @@
     "@fastify/under-pressure": "^9.0.3",
     "bcryptjs": "^3.0.2",
     "bottleneck": "^2.19.5",
-    "cross-env": "^7.0.3",
     "dotenv": "^16.4.5",
     "exceljs": "^4.4.0",
     "fastify": "^5.6.0",
     "http-errors": "^2.0.0",
     "json2csv": "^6.0.0-alpha.2",
     "jsonwebtoken": "^9.0.2",
-    "lodash": "^4.17.21",
     "mime-types": "^3.0.1",
     "mongoose": "^8.8.1",
     "mongoose-aggregate-paginate-v2": "^1.1.4",
@@ -53,25 +50,16 @@
     "nodemailer": "^7.0.3",
     "qs": "^6.14.0",
     "swagger-jsdoc": "^6.2.8",
-    "tough-cookie": "^5.1.2",
     "user-agents": "^1.1.374",
-    "uuid": "^11.0.3",
+    "uuid": "^13.0.0",
     "winston": "^3.17.0",
     "winston-daily-rotate-file": "^5.0.0",
-    "xss": "^1.0.15",
-    "xss-clean": "^0.1.4"
+    "xss": "^1.0.15"
   },
   "devDependencies": {
     "@eslint/js": "^9.14.0",
-    "babel-cli": "^6.26.0",
-    "babel-preset-env": "^0.0.0",
     "eslint": "^9.14.0",
     "globals": "^16.2.0",
     "nodemon": "^3.1.7"
-  },
-  "babel": {
-    "presets": [
-      "env"
-    ]
   }
 }
