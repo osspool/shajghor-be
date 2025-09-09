@@ -11,19 +11,19 @@ import { generateTokens } from "#utils/generateToken.js";
 
 
 // Register User
-const register = async (req, res) => {
-  // return res.status(404).json({ 
+const register = async (request, reply) => {
+  // return reply.code(404).send({ 
   //   message: "Registration is currently disabled. Please contact admin to get access." 
   // });
 
-  const { name, email, password, role="customer" } = req.body;
-  // console.log(req.body);
+  const { name, email, password, role="customer" } = request.body;
+  // console.log(request.body);
 
   try {
     const userExists = await User.findOne({ email });
 
     if (userExists) {
-      return res.status(400).json({ message: "User already exists" });
+      return reply.code(400).send({ message: "User already exists" });
     }
 
     const user = new User({
@@ -33,20 +33,20 @@ const register = async (req, res) => {
     });
     await user.save();
 
-    res.json({ message: "User registered" });
+    return reply.code(201).send({ message: "User registered" });
   } catch (error) {
     console.log(error);
-    res.status(500).send("Error registering user");
+    return reply.code(500).send({ message: "Error registering user" });
   }
 };
 
 // Login User
-const login = async (req, res, next) => {
-  const { email, password } = req.body;
+const login = async (request, reply) => {
+  const { email, password } = request.body;
   try {
     const user = await User.findOne({ email });
     if (!user || !(await user.matchPassword(password))) {
-      throw createError(401, "Invalid email or password");
+      return reply.code(401).send({ message: "Invalid email or password" });
     }
 
     const { token, refreshToken } = generateTokens(user);
@@ -64,61 +64,53 @@ const login = async (req, res, next) => {
       userData.vendorId = user.vendorId;
     }
 
-    res.json({
-      token,
-      refreshToken,
-      user: userData,
-    });
+    const payload = { token, refreshToken, user: userData };
+    return reply.code(200).send(payload);
   } catch (error) {
-    next(error);
+    return reply.code(500).send({ message: 'Login failed' });
   }
 };
 
 // Refresh Token
-const refreshToken = async (req, res, next) => {
-  const { token: refreshToken } = req.body;
+const refreshToken = async (request, reply) => {
+  const { token: refreshToken } = request.body;
 
-  if (!refreshToken) {
-    return next(createError(401, "Refresh token required"));
-  }
+  if (!refreshToken) return reply.code(401).send({ message: 'Refresh token required' });
 
   try {
     const decoded = jwt.verify(refreshToken, config.app.jwtRefresh);
     const user = await User.findById(decoded.id);
 
-    if (!user) {
-      throw createError(403, "Invalid refresh token");
-    }
+    if (!user) return reply.code(403).send({ message: 'Invalid refresh token' });
 
     const { token, refreshToken: newRefreshToken } = generateTokens(user);
 
-    res.json({ token, refreshToken: newRefreshToken });
+    const payload = { token, refreshToken: newRefreshToken };
+    return reply.code(200).send(payload);
   } catch (error) {
-    next(error);
+    return reply.code(401).send({ message: 'Invalid refresh token' });
   }
 };
 
 // Check if User Exists
-const getProfile = async (req, res, next) => {
+const getProfile = async (request, reply) => {
   try {
-    const { email } = req.body;
+    const { email } = request.body;
     const user = await User.findOne({ email }).select("-password");
-    if (!user) throw createError(404, "User not found");
-    res.status(200).json(user);
+    if (!user) return reply.code(404).send({ message: 'User not found' });
+    return reply.code(200).send(user);
   } catch (error) {
-    next(error);
+    return reply.code(500).send({ message: 'Failed to fetch profile' });
   }
 };
 
 // Forgot Password
-const forgotPassword = async (req, res, next) => {
-  const { email } = req.body;
+const forgotPassword = async (request, reply) => {
+  const { email } = request.body;
 
   try {
     const user = await User.findOne({ email });
-    if (!user) {
-      throw createError(404, "User not found");
-    }
+    if (!user) return reply.code(404).send({ message: 'User not found' });
 
     const token = crypto.randomBytes(20).toString("hex");
     user.resetPasswordToken = token;
@@ -159,15 +151,15 @@ const forgotPassword = async (req, res, next) => {
       html: htmlTemplate
   });
 
-    res.json({ message: "Password reset email sent" });
+    return reply.code(200).send({ message: "Password reset email sent" });
   } catch (error) {
-    next(error);
+    return reply.code(500).send({ message: 'Failed to send reset email' });
   }
 };
 
 // Reset Password
-const resetPassword = async (req, res, next) => {
-  const { token, newPassword } = req.body;
+const resetPassword = async (request, reply) => {
+  const { token, newPassword } = request.body;
 
   try {
     const user = await User.findOne({
@@ -175,9 +167,7 @@ const resetPassword = async (req, res, next) => {
       resetPasswordExpires: { $gt: Date.now() },
     });
 
-    if (!user) {
-      throw createError(400, "Invalid or expired token");
-    }
+    if (!user) return reply.code(400).send({ message: 'Invalid or expired token' });
 
     const hashedPassword = await bcrypt.hash(newPassword, 10);
     user.password = hashedPassword;
@@ -185,9 +175,9 @@ const resetPassword = async (req, res, next) => {
     user.resetPasswordExpires = undefined;
     await user.save();
 
-    res.json({ message: "Password has been reset" });
+    return reply.code(200).send({ message: "Password has been reset" });
   } catch (error) {
-    next(error);
+    return reply.code(500).send({ message: 'Failed to reset password' });
   }
 };
 
@@ -195,21 +185,16 @@ const resetPassword = async (req, res, next) => {
 // @desc    Update user role (Admin only)
 // @route   PUT /api/users/:id/role
 // @access  Private/Admin
-const updateUserRole = async (req, res) => {
-  const user = await User.findById(req.params.id);
+const updateUserRole = async (request, reply) => {
+  const user = await User.findById(request.params.id);
   
   if (user) {
-    user.role = req.body.role || user.role;
+    user.role = request.body.role || user.role;
     const updatedUser = await user.save();
-    
-    res.json({
-      _id: updatedUser._id,
-      name: updatedUser.name,
-      email: updatedUser.email,
-    });
+    const payload = { _id: updatedUser._id, name: updatedUser.name, email: updatedUser.email };
+    return reply.send(payload);
   } else {
-    res.status(404).json({ message: 'User not found' });
-    throw new Error('User not found');
+    return reply.code(404).send({ message: 'User not found' });
   }
 };
 

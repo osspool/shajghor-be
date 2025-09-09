@@ -14,7 +14,7 @@ class BaseController {
     this.delete = this.delete.bind(this);
   }
 
-  async create(req, res) {
+  async create(req, reply) {
     const options = this._buildOptions(req);
     // Multi-tenant default scoping for non-superadmin
     const roles = Array.isArray(req.user?.roles) ? req.user.roles : (req.user?.roles ? [req.user.roles] : []);
@@ -23,10 +23,10 @@ class BaseController {
       req.body.organizationId = req.context.organizationId;
     }
     const document = await this.service.create(req.body, options);
-    res.status(201).json({ success: true, data: document });
+    return reply.code(201).send({ success: true, data: document });
   }
 
-  async getAll(req, res) {
+  async getAll(req, reply) {
     // Parse query parameters using the dedicated parser (prefer validated)
     const rawQuery = (req.validated && req.validated.query) ? req.validated.query : req.query;
     const queryParams = QueryParser.parseQuery(rawQuery);
@@ -42,22 +42,22 @@ class BaseController {
       queryParams.filters = { ...(queryParams.filters || {}), parlourId: req.context.parlourId };
     }
     const result = await this.service.getAll(queryParams, options);
-    res.status(200).json({ success: true, ...result });
+    return reply.code(200).send({ success: true, ...result });
   }
 
-  async getById(req, res) {
+  async getById(req, reply) {
     const options = this._buildOptions(req);
     const document = await this.service.getById(req.params.id, options);
-    res.status(200).json({ success: true, data: document });
+    return reply.code(200).send({ success: true, data: document });
   }
 
-  async getByQuery(req, res) {
+  async getByQuery(req, reply) {
     const options = this._buildOptions(req);
     const document = await this.service.getByQuery(req.query, options);
-    res.status(200).json({ success: true, data: document });
+    return reply.code(200).send({ success: true, data: document });
   }
 
-  async update(req, res) {
+  async update(req, reply) {
     const options = this._buildOptions(req);
     // Preserve org scoping for non-superadmin when setting missing orgId
     const roles = Array.isArray(req.user?.roles) ? req.user.roles : (req.user?.roles ? [req.user.roles] : []);
@@ -66,13 +66,13 @@ class BaseController {
       req.body.organizationId = req.context.organizationId;
     }
     const document = await this.service.update(req.params.id, req.body, options);
-    res.status(200).json({ success: true, data: document });
+    return reply.code(200).send({ success: true, data: document });
   }
 
-  async delete(req, res) {
+  async delete(req, reply) {
     const options = this._buildOptions(req);
     const result = await this.service.delete(req.params.id, options);
-    res.status(200).json(result);
+    return reply.code(200).send(result);
   }
 
   // Helper method to build common options
@@ -82,7 +82,8 @@ class BaseController {
       user: req.user,
       select: (req.validated?.query?.select) || req.query.select,
       populate: (req.validated?.query?.populate) || req.query.populate,
-      lean: ((req.validated?.query?.lean) || req.query.lean) === 'true',
+      // Lean by default; allow opt-out with ?lean=false
+      lean: ((req.validated?.query?.lean) || req.query.lean) === 'false' ? false : true,
       includeDeleted: ((req.validated?.query?.includeDeleted) || req.query.includeDeleted) === 'true',
     };
   }

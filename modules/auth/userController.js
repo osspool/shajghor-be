@@ -4,7 +4,7 @@ import User from "#modules/auth/user.model.js";
 /**
  * Update User Details (e.g., name)
  */
-const updateUser = async (req, res) => {
+const updateUser = async (req, reply) => {
   const userId = req.user.id; // Assuming authentication middleware sets req.user
 
   const { name, email, phone } = req.body; // Add other user-related fields as needed
@@ -18,16 +18,14 @@ const updateUser = async (req, res) => {
 
   // If no valid fields are provided for update, respond with an error
   if (Object.keys(allowedUpdates).length === 0) {
-    return res
-      .status(400)
-      .json({ message: "No valid fields provided for update." });
+    return reply.code(400).send({ message: "No valid fields provided for update." });
   }
 
   // Fetch the user from the database
   const user = await User.findById(userId);
 
   if (!user) {
-    return res.status(404).json({ message: "User not found." });
+    return reply.code(404).send({ message: "User not found." });
   }
 
   // Apply updates to the user object
@@ -45,19 +43,17 @@ const updateUser = async (req, res) => {
   delete userResponse.resetPasswordExpires;
 
   // Send the response
-  res.json({
-    message: "User updated successfully."
-  });
+  return reply.send({ message: "User updated successfully." });
 };
 
 
 
-const getUserByToken = async (req, res) => {
+const getUserByToken = async (req, reply) => {
   let user = req.user;
   if (!user.roles.includes('admin')) {
     user.organization = undefined;
   }
-  return res.json(user);
+  return reply.send(user);
 };
 
 export { updateUser, getUserByToken };

@@ -1,3 +1,13 @@
+export const PopularCities = {
+  DHAKA: 'dhaka',
+};
+
+export const PopularAreasByCity = {
+  dhaka: [
+    'gulshan', 'banani', 'baridhara', 'dhanmondi', 'uttara', 'mirpur', 'badda', 'baily road', 'mohakhali', 'tejgaon', 'motijheel', 'ramna', 'lalbagh', 'savar', 'jatrabari', 'khilgaon', 'khilkhet', 'shyamoli', 'farmgate', 'wari', 'azimpur', 'palton',
+  ],
+};
+
 // Common enums and constants used across the application
 
 

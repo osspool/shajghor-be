@@ -2,7 +2,7 @@ import mongoose from 'mongoose';
 import Transaction from './transaction.model.js';
 import Booking from '#modules/booking/booking.model.js';
 
-export async function receivePayment(req, res, next) {
+export async function receivePayment(request, reply) {
   try {
     const {
       parlourId,
@@ -16,11 +16,11 @@ export async function receivePayment(req, res, next) {
       notes,
       date,
       category,
-    } = req.body;
+    } = request.body;
 
     const payload = {
       parlourId,
-      organizationId: organizationId || req.context?.organizationId,
+      organizationId: organizationId || request.context?.organizationId,
       bookingId,
       customerId,
       type: 'income',
@@ -31,8 +31,8 @@ export async function receivePayment(req, res, next) {
       reference,
       notes,
       date: date ? new Date(date) : new Date(),
-      handledBy: req.user?._id,
-      idempotencyKey: req.body?.idempotencyKey,
+      handledBy: request.user?._id,
+      idempotencyKey: request.body?.idempotencyKey,
     };
 
     // Strip falsy idempotencyKey to avoid unique index conflicts on null/empty
@@ -77,47 +77,47 @@ export async function receivePayment(req, res, next) {
       await Booking.updateOne({ _id: bookingId }, { $set: { paymentStatus, paymentMethod: method } });
     }
 
-    return res.status(201).json({ success: true, data: doc, summary });
+    return reply.code(201).send({ success: true, data: doc, summary });
   } catch (err) {
-    next(err);
+    return reply.code(500).send({ message: 'Failed to record payment' });
   }
 }
 
-export async function capitalInjection(req, res, next) {
+export async function capitalInjection(request, reply) {
   try {
-    const body = req.body || {};
+    const body = request.body || {};
     const payload = {
       ...body,
-      organizationId: body.organizationId || req.context?.organizationId,
+      organizationId: body.organizationId || request.context?.organizationId,
       type: 'income',
       category: 'capital_injection',
-      handledBy: req.user?._id,
+      handledBy: request.user?._id,
     };
     if (!payload.idempotencyKey) delete payload.idempotencyKey;
     const doc = await Transaction.create(payload);
-    res.status(201).json({ success: true, data: doc });
-  } catch (err) { next(err); }
+    return reply.code(201).send({ success: true, data: doc });
+  } catch (err) { return reply.code(500).send({ message: 'Failed to record capital injection' }); }
 }
 
-export async function ownerWithdrawal(req, res, next) {
+export async function ownerWithdrawal(request, reply) {
   try {
-    const body = req.body || {};
+    const body = request.body || {};
     const payload = {
       ...body,
-      organizationId: body.organizationId || req.context?.organizationId,
+      organizationId: body.organizationId || request.context?.organizationId,
       type: 'expense',
       category: 'owner_withdrawal',
-      handledBy: req.user?._id,
+      handledBy: request.user?._id,
     };
     if (!payload.idempotencyKey) delete payload.idempotencyKey;
     const doc = await Transaction.create(payload);
-    res.status(201).json({ success: true, data: doc });
-  } catch (err) { next(err); }
+    return reply.code(201).send({ success: true, data: doc });
+  } catch (err) { return reply.code(500).send({ message: 'Failed to record owner withdrawal' }); }
 }
 
-export async function refundPayment(req, res, next) {
+export async function refundPayment(request, reply) {
   try {
-    const { bookingId, amount, method, paymentDetails, reference, notes, date, parlourId, organizationId, customerId } = req.body;
+    const { bookingId, amount, method, paymentDetails, reference, notes, date, parlourId, organizationId, customerId } = request.body;
     const payload = {
       bookingId,
       amount,
@@ -127,13 +127,13 @@ export async function refundPayment(req, res, next) {
       notes,
       date: date ? new Date(date) : new Date(),
       parlourId,
-      organizationId: organizationId || req.context?.organizationId,
+      organizationId: organizationId || request.context?.organizationId,
       customerId,
       type: 'expense',
       category: 'refund',
-      handledBy: req.user?._id,
+      handledBy: request.user?._id,
     };
-    if (!payload.idempotencyKey) payload.idempotencyKey = req.body?.idempotencyKey;
+    if (!payload.idempotencyKey) payload.idempotencyKey = request.body?.idempotencyKey;
     if (!payload.idempotencyKey) delete payload.idempotencyKey;
     let doc;
     if (payload.idempotencyKey) {
@@ -170,13 +170,13 @@ export async function refundPayment(req, res, next) {
     }
     await Booking.updateOne({ _id: bookingId }, { $set: { paymentStatus } });
 
-    return res.status(201).json({ success: true, data: doc, summary });
-  } catch (err) { next(err); }
+    return reply.code(201).send({ success: true, data: doc, summary });
+  } catch (err) { return reply.code(500).send({ message: 'Failed to refund payment' }); }
 }
 
-export async function bookingPaymentSummary(req, res, next) {
+export async function bookingPaymentSummary(request, reply) {
   try {
-    const { bookingId } = req.query;
+    const { bookingId } = request.query;
     const booking = await Booking.findById(bookingId).select('totalAmount additionalCost');
     const paidAgg = await Transaction.aggregate([
       { $match: { bookingId: new mongoose.Types.ObjectId(String(bookingId)), type: 'income' } },
@@ -190,8 +190,8 @@ export async function bookingPaymentSummary(req, res, next) {
     const paid = paidAgg[0]?.sum || 0;
     const refunded = refundedAgg[0]?.sum || 0;
     const summary = { totalDue, paid, refunded, balance: totalDue - paid + refunded };
-    res.status(200).json({ success: true, data: summary });
-  } catch (err) { next(err); }
+    return reply.code(200).send({ success: true, data: summary });
+  } catch (err) { return reply.code(500).send({ message: 'Failed to compute payment summary' }); }
 }
 
 

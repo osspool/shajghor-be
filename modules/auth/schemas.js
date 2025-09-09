@@ -1,32 +1,40 @@
-import { z } from 'zod';
+import User from './user.model.js';
+import { buildCrudSchemasFromModel } from '#common/utils/mongooseToJsonSchema.js';
 
-export const loginBody = z.object({
-  email: z.string().email(),
-  password: z.string().min(1),
-});
-
-export const registerBody = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
-  roles: z.array(z.enum(['superadmin','admin','manager','hr','employee','user'])).optional(),
-});
-
-export const refreshBody = z.object({ token: z.string().min(1) });
-export const forgotBody = z.object({ email: z.string().email() });
-export const resetBody = z.object({ token: z.string().min(1), newPassword: z.string().min(6) });
-export const getProfileBody = z.object({ email: z.string().email() });
-export const updateUserBody = z.object({ name: z.string().optional(), email: z.string().email().optional(), phone: z.string().optional() });
+export const loginBody = { type: 'object', properties: { email: { type: 'string', format: 'email' }, password: { type: 'string', minLength: 1 } }, required: ['email','password'], additionalProperties: false };
+export const registerBody = {
+  type: 'object',
+  properties: {
+    name: { type: 'string', minLength: 1 },
+    email: { type: 'string', format: 'email' },
+    password: { type: 'string', minLength: 6 },
+    roles: { type: 'array', items: { type: 'string', enum: ['superadmin','admin','manager','hr','employee','user'] } },
+  },
+  required: ['name','email','password'],
+  additionalProperties: false,
+};
+export const refreshBody = { type: 'object', properties: { token: { type: 'string', minLength: 1 } }, required: ['token'], additionalProperties: false };
+export const forgotBody = { type: 'object', properties: { email: { type: 'string', format: 'email' } }, required: ['email'], additionalProperties: false };
+export const resetBody = { type: 'object', properties: { token: { type: 'string', minLength: 1 }, newPassword: { type: 'string', minLength: 6 } }, required: ['token','newPassword'], additionalProperties: false };
+export const getProfileBody = { type: 'object', properties: { email: { type: 'string', format: 'email' } }, required: ['email'], additionalProperties: false };
+export const updateUserBody = { type: 'object', properties: { name: { type: 'string' }, email: { type: 'string', format: 'email' }, phone: { type: 'string' } }, additionalProperties: false };
 
 // User CRUD schemas
-export const userCreateBody = z.object({
-  name: z.string().min(1),
-  email: z.string().email(),
-  password: z.string().min(6),
-  roles: z.array(z.enum(['superadmin','admin','manager','hr','employee','user'])).optional(),
+const { crudSchemas } = buildCrudSchemasFromModel(User, {
+  output: 'json',
+  query: {
+    // keep list open but at least provide basic filterables if needed later
+    filterableFields: {
+      name: { type: 'string' },
+      email: { type: 'string' },
+    },
+  },
 });
-export const userUpdateBody = userCreateBody.partial();
-export const userGetParams = z.object({ id: z.string().length(24) });
-export const userListQuery = z.object({}).passthrough();
+
+// Re-export shapes expected by auth routes
+export const userCreateBody = crudSchemas.create.body;
+export const userUpdateBody = crudSchemas.update.body;
+export const userGetParams = crudSchemas.get.params;
+export const userListQuery = crudSchemas.list.query;
 
 

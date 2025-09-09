@@ -1,14 +1,7 @@
-// routes/utils/compose.js
-// Helper to compose auth + validation + custom middlewares succinctly
-import { validate } from '#common/middlewares/validate.js';
-import { authorize } from '#common/middlewares/authMiddleware.js';
-
-export function withAuth(roles = []) {
-  return roles.length ? [authorize(...roles)] : [];
-}
-
-export function withValidation(schema = {}) {
-  return schema && (schema.body || schema.query || schema.params) ? [validate(schema)] : [];
+// routes/utils/compose.js (Fastify)
+// Minimal helper to compose preHandlers using Fastify decorators
+export function withAuth(fastify, roles = []) {
+  return roles.length ? [fastify.authenticate, fastify.authorize(...roles)] : [];
 }
 
 export function combine(...groups) {

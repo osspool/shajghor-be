@@ -1,9 +1,9 @@
 // routes/utils/createCrudRouter.js
-import express from 'express';
-import { validate } from '#common/middlewares/validate.js';
-import authMiddleware, { authorize } from '#common/middlewares/authMiddleware.js';
+// Use Fastify-decorated auth plugin (authenticate/authorize)
 import { registerPath, registerTag } from '#common/docs/apiDocs.js';
-import { registerZod, buildParametersFromZodObject } from '#common/docs/swaggerHelpers.js';
+// using JSON schema only
+import { createResponseCache } from '#common/plugins/cache.plugin.js';
+import { buildCrudResponseSchemas, filterEntitySchema, itemWrapper, paginateWrapper, messageWrapper } from '#common/docs/responseSchemas.js';
 
 /**
  * Creates a CRUD router from a controller implementing BaseController interface
@@ -15,8 +15,30 @@ import { registerZod, buildParametersFromZodObject } from '#common/docs/swaggerH
 //   auth?: { list?, get?, create?, update?, remove? } -> array of allowed roles per op
 //   schemas?: { list?, get?, create?, update?, remove? } -> { body?, query?, params? } per op
 // }
-export default function createCrudRouter(controller, options = {}) {
-  const router = express.Router();
+// No wrapper needed; pass preHandlers directly
+
+// No Express adapters; Fastify-only project
+
+function ensureJsonSchema(obj) {
+  if (!obj) return undefined;
+  const out = {};
+  if (obj.body) out.body = obj.body;
+  if (obj.params) out.params = obj.params;
+  if (obj.querystring) out.querystring = obj.querystring;
+  if (obj.query) out.querystring = obj.query;
+  return Object.keys(out).length ? out : undefined;
+}
+
+function buildParametersFromSchema(schemaLike, location = 'query') {
+  if (!schemaLike) return [];
+  const schema = schemaLike.querystring || schemaLike.params || schemaLike;
+  if (schema && schema.type === 'object' && schema.properties) {
+    return Object.entries(schema.properties).map(([name, prop]) => ({ in: location, name, required: Array.isArray(schema.required) ? schema.required.includes(name) : false, schema: prop && typeof prop === 'object' ? prop : { type: 'string' } }));
+  }
+  return [];
+}
+
+export default function createCrudRouter(fastify, controller, options = {}) {
 
   const middlewares = options.middlewares || {};
   const auth = options.auth || {};
@@ -30,8 +52,12 @@ export default function createCrudRouter(controller, options = {}) {
     remove: middlewares.remove || [],
   };
 
-  const authMw = (roles) => (roles && roles.length ? [authMiddleware, authorize(...roles)] : []);
-  const valMw = (schema) => (schema && (schema.body || schema.query || schema.params) ? [validate(schema)] : []);
+  const authMw = (roles) => (roles && roles.length ? [fastify.authenticate, fastify.authorize(...roles)] : []);
+
+  // Optional simple cache for read-heavy endpoints
+  const cache = options.cache || {};
+  const listCacheMw = cache.list ? [createResponseCache(cache.list).middleware] : [];
+  const getCacheMw = cache.get ? [createResponseCache(cache.get).middleware] : [];
 
   // Additional custom routes FIRST to avoid '/:id' conflicts
   registerTag(options.tag);
@@ -44,35 +70,56 @@ export default function createCrudRouter(controller, options = {}) {
       const toOpenApiPath = (p) => p.replace(/:([A-Za-z0-9_]+)/g, '{$1}');
 
       const routeAuthMw = authMw(r.authRoles || []);
-      const routeValMw = valMw(r.schemas || {});
-
-      if (typeof router[method] === 'function') {
-        router[method](r.path, ...routeAuthMw, ...routeValMw, r.handler);
+      const baseSchema = ensureJsonSchema(r.schemas || {});
+      // Auto-generate response schema if none provided
+      const filteredEntity = filterEntitySchema((schemas.entity || {}), options.schemas?.filter || options.filter || {});
+      const successCode = r.successCode || (method === 'post' ? 201 : 200);
+      let responseSchemas = r.responses;
+      if (!responseSchemas && r.noResponseSchema !== true) {
+        if (r.responseSchema) {
+          responseSchemas = { [successCode]: r.responseSchema };
+        } else if (r.response === 'list' || r.isList === true) {
+          responseSchemas = { [successCode]: paginateWrapper(filteredEntity) };
+        } else if (r.response === 'message') {
+          responseSchemas = { [successCode]: messageWrapper() };
+        } else {
+          // Heuristic by method
+          if (method === 'get') responseSchemas = { 200: itemWrapper(filteredEntity) };
+          else if (method === 'post') responseSchemas = { 201: itemWrapper(filteredEntity) };
+          else if (method === 'delete') responseSchemas = { 200: messageWrapper() };
+          else responseSchemas = { 200: itemWrapper(filteredEntity) };
+        }
       }
 
+      const schema = { ...(baseSchema || {}), ...(responseSchemas ? { response: responseSchemas } : {}) };
+
+      fastify.route({ method: method.toUpperCase(), url: r.path, schema, preHandler: [...routeAuthMw], handler: r.handler });
+
       const parameters = [
-        ...(buildParametersFromZodObject(r.schemas?.params, 'path') || []),
-        ...(buildParametersFromZodObject(r.schemas?.query, 'query') || []),
+        ...buildParametersFromSchema(schema?.params ? { params: schema.params } : (r.schemas?.params || {}), 'path'),
+        ...buildParametersFromSchema(schema?.querystring ? { querystring: schema.querystring } : (r.schemas?.query || {}), 'query'),
       ].filter(Boolean);
 
       registerPath(toOpenApiPath(fullPath), method, {
         tags: tag ? [tag] : undefined,
         summary: r.summary || undefined,
         parameters: parameters.length ? parameters : undefined,
-        requestBody: r.schemas?.body
-          ? { required: true, content: { 'application/json': { schema: registerZod(`${tag || 'Item'}CustomBody`, r.schemas.body) } } }
-          : undefined,
-        responses: r.responses || { 200: { description: 'Success' } },
+        requestBody: r.schemas?.body ? { required: true, content: { 'application/json': { schema: r.schemas.body } } } : undefined,
+        responses: responseSchemas || { 200: { description: 'Success' } },
       });
     });
   }
 
+  // Auto response schemas
+  const responses = buildCrudResponseSchemas(schemas.entity || {} , { filter: schemas.filter });
+
   // List
-  router.get('/', ...authMw(auth.list), ...valMw(schemas.list), ...mw.list, controller.getAll);
+  fastify.get('/', { schema: { ...ensureJsonSchema(schemas.list), response: responses.list }, preHandler: [...authMw(auth.list), ...listCacheMw, ...mw.list] }, controller.getAll);
+  const listSchema = ensureJsonSchema(schemas.list) || schemas.list || {};
   registerPath((options.basePath || '') + '/', 'get', {
     tags: options.tag ? [options.tag] : undefined,
     summary: `List ${options.tag || 'items'}`,
-    parameters: buildParametersFromZodObject(schemas.list?.query),
+    parameters: buildParametersFromSchema(listSchema?.querystring ? { querystring: listSchema.querystring } : (schemas.list?.query || {}), 'query'),
     responses: {
       200: {
         description: 'Paginated list',
@@ -80,7 +127,7 @@ export default function createCrudRouter(controller, options = {}) {
     },
   });
   // Get by id
-  router.get('/:id', ...authMw(auth.get), ...valMw(schemas.get), ...mw.get, controller.getById);
+  fastify.get('/:id', { schema: { ...ensureJsonSchema(schemas.get), response: responses.get }, preHandler: [...authMw(auth.get), ...getCacheMw, ...mw.get] }, controller.getById);
   registerPath((options.basePath || '') + '/{id}', 'get', {
     tags: options.tag ? [options.tag] : undefined,
     summary: `Get ${options.tag || 'item'} by id`,
@@ -88,24 +135,24 @@ export default function createCrudRouter(controller, options = {}) {
     responses: { 200: { description: 'Item' } },
   });
   // Create
-  router.post('/', ...authMw(auth.create), ...valMw(schemas.create), ...mw.create, controller.create);
+  fastify.post('/', { schema: { ...ensureJsonSchema(schemas.create), response: responses.create }, preHandler: [...authMw(auth.create), ...mw.create] }, controller.create);
   registerPath((options.basePath || '') + '/', 'post', {
     tags: options.tag ? [options.tag] : undefined,
     summary: `Create ${options.tag || 'item'}`,
-    requestBody: schemas.create?.body ? { required: true, content: { 'application/json': { schema: registerZod(`${options.tag || 'Item'}Create`, schemas.create.body) } } } : undefined,
+    requestBody: schemas.create?.body ? { required: true, content: { 'application/json': { schema: schemas.create.body } } } : undefined,
     responses: { 201: { description: 'Created' } },
   });
   // Update (PATCH preferred)
-  router.patch('/:id', ...authMw(auth.update), ...valMw(schemas.update), ...mw.update, controller.update);
+  fastify.patch('/:id', { schema: { ...ensureJsonSchema(schemas.update), response: responses.update }, preHandler: [...authMw(auth.update), ...mw.update] }, controller.update);
   registerPath((options.basePath || '') + '/{id}', 'patch', {
     tags: options.tag ? [options.tag] : undefined,
     summary: `Update ${options.tag || 'item'}`,
     parameters: [{ in: 'path', name: 'id', required: true, schema: { type: 'string' } }],
-    requestBody: schemas.update?.body ? { required: true, content: { 'application/json': { schema: registerZod(`${options.tag || 'Item'}Update`, schemas.update.body) } } } : undefined,
+    requestBody: schemas.update?.body ? { required: true, content: { 'application/json': { schema: schemas.update.body } } } : undefined,
     responses: { 200: { description: 'Updated' } },
   });
   // Delete
-  router.delete('/:id', ...authMw(auth.remove), ...valMw(schemas.remove), ...mw.remove, controller.delete);
+  fastify.delete('/:id', { schema: { ...ensureJsonSchema(schemas.remove), response: responses.remove }, preHandler: [...authMw(auth.remove), ...mw.remove] }, controller.delete);
   registerPath((options.basePath || '') + '/{id}', 'delete', {
     tags: options.tag ? [options.tag] : undefined,
     summary: `Delete ${options.tag || 'item'}`,
@@ -114,7 +161,7 @@ export default function createCrudRouter(controller, options = {}) {
   });
 
   registerTag(options.tag);
-  return router;
+  return fastify;
 }
 
 

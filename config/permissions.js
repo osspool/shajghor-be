@@ -23,8 +23,8 @@ const permissions = {
   parlours: {
     list: [], // public can list
     get: [],  // public can view
-    create: ['admin'],
-    update: ['admin', 'manager'],
+    create: ['admin', 'superadmin'],
+    update: ['admin', 'manager', 'superadmin'],
     remove: ['admin'],
   },
   // Services

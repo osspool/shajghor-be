@@ -1,44 +1,30 @@
-import { z } from 'zod';
-import { schemaUtils } from '#common/utils/schemaUtils.js';
+import Archive from './archive.model.js';
+import { buildCrudSchemasFromModel } from '#common/utils/mongooseToJsonSchema.js';
 
-const { objectIdStringSchema, createBaseQuerySchema, makeFilterableSchema } = schemaUtils;
-
-export const archiveCreateBody = z.object({
-  type: z.enum(['booking','transaction']),
-  organizationId: objectIdStringSchema.optional(),
-  parlourId: objectIdStringSchema.optional(),
-  rangeFrom: z.string().datetime().optional(),
-  rangeTo: z.string().datetime().optional(),
-  filePath: z.string(),
-  format: z.enum(['json']).optional(),
-  recordCount: z.number().min(0).optional(),
-  sizeBytes: z.number().min(0).optional(),
-  notes: z.string().optional(),
+const { crudSchemas } = buildCrudSchemasFromModel(Archive, {
+  output: 'json',
+  query: {
+    filterableFields: {
+      type: { type: 'string' },
+      organizationId: { type: 'string' },
+      parlourId: { type: 'string' },
+    },
+  },
 });
 
-export const archiveUpdateBody = archiveCreateBody.partial();
-export const archiveGetParams = z.object({ id: objectIdStringSchema });
+export const archiveSchemas = crudSchemas;
+export default archiveSchemas;
 
-export const archiveListQuery = createBaseQuerySchema({
-  type: makeFilterableSchema(z.string()),
-  organizationId: makeFilterableSchema(z.string(), true),
-  parlourId: makeFilterableSchema(z.string(), true),
-});
-
-export const archiveSchemas = {
-  create: { body: archiveCreateBody },
-  update: { body: archiveUpdateBody, params: archiveGetParams },
-  get: { params: archiveGetParams },
-  list: { query: archiveListQuery },
-  remove: { params: archiveGetParams },
+export const archiveRunQuery = {
+  type: 'object',
+  properties: {
+    type: { type: 'string', enum: ['booking','transaction'] },
+    organizationId: { type: 'string' },
+    parlourId: { type: 'string' },
+    rangeFrom: { type: 'string', format: 'date-time' },
+    rangeTo: { type: 'string', format: 'date-time' },
+  },
+  additionalProperties: false,
 };
-
-export const archiveRunQuery = z.object({
-  type: z.enum(['booking','transaction']),
-  organizationId: objectIdStringSchema.optional(),
-  parlourId: objectIdStringSchema.optional(),
-  rangeFrom: z.string().datetime().optional(),
-  rangeTo: z.string().datetime().optional(),
-});
 
 

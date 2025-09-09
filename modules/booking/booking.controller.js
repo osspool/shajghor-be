@@ -7,10 +7,10 @@ export class BookingController extends BaseController {
     this.getAvailability = this.getAvailability.bind(this);
   }
 
-  async getAvailability(req, res) {
-    const { parlourId, date } = req.query;
+  async getAvailability(request, reply) {
+    const { parlourId, date } = (request.validated?.query || request.query || {});
     const slots = await this.service.computeAvailability({ parlourId, date });
-    res.status(200).json({ success: true, data: slots });
+    return reply.code(200).send({ success: true, data: slots });
   }
 }
 

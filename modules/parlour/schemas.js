@@ -1,75 +1,45 @@
-import { z } from 'zod';
-import { schemaUtils } from '#common/utils/schemaUtils.js';
+import Parlour from './parlour.model.js';
+import { buildCrudSchemasFromModel } from '#common/utils/mongooseToJsonSchema.js';
 
-const { objectIdStringSchema, createBaseQuerySchema } = schemaUtils;
-
-const workingHoursItem = z.object({
-  isOpen: z.boolean().optional(),
-  startTime: z.string().optional(),
-  endTime: z.string().optional(),
+// Generate base CRUD schemas from Mongoose model
+const { crudSchemas, createBody, updateBody, listQuery } = buildCrudSchemasFromModel(Parlour, {
+  output: 'json',
+  create: {
+    // Keep defaults; requireds inferred from schema
+    omitFields: ['createdAt', 'updatedAt', '__v'],
+  },
+  query: {
+    // Preserve existing filterable fields and operators
+    filterableFields: {
+      slug: { type: 'string' },
+      name: { type: 'string' },
+      branch: { type: 'string' },
+      ownerId: { type: 'string' },
+      organizationId: { type: 'string' },
+      serviceLocationMode: { type: 'string' },
+      hasOffers: { type: 'boolean' },
+      isFeatured: { type: 'boolean' },
+      'advert.running': { type: 'boolean' },
+      providerType: { type: 'string' },
+      serviceTypes: { type: 'string' },
+      tags: { type: 'string' },
+      offerText: { type: 'string' },
+      isActive: { type: 'boolean' },
+      'address.address': { type: 'string' },
+      'address.city': { type: 'string' },
+      'address.area': { type: 'string' },
+    },
+  },
 });
 
-export const parlourCreateBody = z.object({
-  slug: z.string().min(3).regex(/^[a-z0-9-]+$/i, 'Slug can contain letters, numbers, dashes'),
-  name: z.string().min(1),
-  ownerId: objectIdStringSchema.optional(),
-  organizationId: objectIdStringSchema.optional(),
-  address: z.string().optional(),
-  phone: z.string().optional(),
-  email: z.string().email().optional(),
-  coverImage: z.string().optional(),
-  socialLinks: z.record(z.string()).optional(),
-  socialMediaUrl: z.object({
-    instagram: z.string().url().optional(),
-    facebook: z.string().url().optional(),
-    tiktok: z.string().url().optional(),
-    youtube: z.string().url().optional(),
-    website: z.string().url().optional(),
-  }).optional(),
-  workingHours: z.record(workingHoursItem).optional(),
-  breaks: z.array(z.object({ startTime: z.string(), endTime: z.string() })).optional(),
-  providerType: z.enum(['salon','artist']).optional(),
-  serviceTypes: z.array(z.string()).optional(),
-  serviceLocationMode: z.enum(['in-salon','at-home','both']).optional(),
-  capacity: z.number().min(1).optional(),
-  slotDurationMinutes: z.number().min(5).optional(),
-  leadTimeMinutes: z.number().min(0).optional(),
-  dailyCutoffTime: z.string().optional(),
-  hasOffers: z.boolean().optional(),
-  offerText: z.string().optional(),
-  isActive: z.boolean().optional(),
-  about: z.object({
-    title: z.string().optional(),
-    description: z.string().optional(),
-    features: z.array(z.string()).optional(),
-  }).optional(),
-  portfolio: z.array(z.string()).optional(),
-});
+export const parlourCreateBody = createBody;
+export const parlourUpdateBody = updateBody;
+export const parlourListQuery = listQuery;
 
-export const parlourUpdateBody = parlourCreateBody.partial();
-export const parlourGetParams = z.object({ id: objectIdStringSchema });
-export const parlourGetByOwnerParams = z.object({ ownerId: objectIdStringSchema });
-export const parlourGetBySlugParams = z.object({ slug: z.string().min(3).regex(/^[a-z0-9-]+$/i) });
+export const parlourGetParams = { type: 'object', properties: { id: { type: 'string', pattern: '^[0-9a-fA-F]{24}$' } }, required: ['id'] };
+export const parlourGetByOwnerParams = { type: 'object', properties: { ownerId: { type: 'string', pattern: '^[0-9a-fA-F]{24}$' } }, required: ['ownerId'] };
+export const parlourGetBySlugParams = { type: 'object', properties: { slug: { type: 'string', minLength: 3 } }, required: ['slug'] };
 
-export const parlourListQuery = createBaseQuerySchema({
-  slug: schemaUtils.makeFilterableSchema(z.string()),
-  name: schemaUtils.makeFilterableSchema(z.string()),
-  ownerId: schemaUtils.makeFilterableSchema(z.string(), true),
-  organizationId: schemaUtils.makeFilterableSchema(z.string(), true),
-  serviceLocationMode: schemaUtils.makeFilterableSchema(z.string()),
-  hasOffers: schemaUtils.makeFilterableSchema(z.boolean()),
-  offerText: schemaUtils.makeFilterableSchema(z.string()),
-  isActive: schemaUtils.makeFilterableSchema(z.boolean()),
-});
-
-export const parlourSchemas = {
-  create: { body: parlourCreateBody },
-  update: { body: parlourUpdateBody, params: parlourGetParams },
-  get: { params: parlourGetParams },
-  list: { query: parlourListQuery },
-  remove: { params: parlourGetParams },
-};
-
-export default parlourSchemas;
+export default crudSchemas;
 
 

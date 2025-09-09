@@ -1,18 +1,18 @@
 // src/app.js
-import cors from "cors";
-import helmet from "helmet";
-import express from "express";
-import errorHandler from "./common/middlewares/errorHandler.js";
-// import auditMiddleware from "./common/middlewares/auditMiddleware.js";
-import db from "./config/db.js";
+import Fastify from 'fastify';
 import config from "./config/index.js";
-import setupSwagger from "./config/swagger.js";
-import routes from "./routes/routes.index.js";
-import healthRoutes from "./routes/health.js";
+
+import setupFastifySwagger from "./config/fastify-swagger.js";
+import fastifyRoutes from "./routes/fastify.index.js";
+import registerCorePlugins from '#common/plugins/register-core-plugins.js';
 
 class App {
   constructor() {
-    this.app = express();
+    this.app = Fastify({
+      logger: true,
+      trustProxy: true,
+      ajv: { customOptions: { coerceTypes: true, useDefaults: true, removeAdditional: false } },
+    });
     this.server = null;
     this.setupGracefulShutdown();
   }
@@ -21,9 +21,9 @@ class App {
     try {
       // Database connection is now handled in index.js before app initialization
       this.setupJobQueueAndHandlers();
-      this.setupMiddleware();
-      this.setupSwagger();
-      this.setupRoutes();
+      await this.setupPlugins();
+      await this.setupSwagger();
+      await this.setupRoutes();
       this.setupErrorHandling();
       await this.initializeCronJobs();
     } catch (error) {
@@ -57,8 +57,8 @@ class App {
     }
   }
 
-  setupSwagger() {
-    setupSwagger(this.app);
+  async setupSwagger() {
+    await setupFastifySwagger(this.app);
   }
 
   setupGracefulShutdown() {
@@ -74,105 +74,34 @@ class App {
 
   async shutdown(signal) {
     console.log(`Starting graceful shutdown for signal: ${signal}`);
-
-    // Close server if it exists
-    if (this.server) {
-      try {
-        await new Promise((resolve, reject) => {
-          this.server.close((err) => {
-            if (err) {
-              console.error("Error during server shutdown:", err);
-              reject(err);
-            } else {
-              console.log("Server closed successfully");
-              resolve();
-            }
-          });
-        });
-      } catch (error) {
-        console.error("Error while closing server:", error);
-      }
-    }
-
-    // Close database connection
-    try {
-      await db.disconnect();
-      console.log("Database connection closed successfully");
-    } catch (error) {
-      console.error("Error while closing database connection:", error);
-    }
+    try { await this.app.close(); } catch (error) { console.error("Error while closing server:", error); }
 
     // Exit process
     process.exit(0);
   }
 
-  setupMiddleware() {
-    this.app.set("trust proxy", 1);
-    this.app.use(helmet());
-    this.app.use(express.json());
-    this.app.use(express.urlencoded({ extended: true }));
-
-    // --- START: CORRECT CORS CONFIGURATION ---
-    const allowedOrigins = config.cors.origin;
-
-    const corsOptions = {
-      origin: (origin, callback) => {
-        // This logic allows requests from your allowed origins list
-        // and also allows requests that don't have an origin (like Postman or server-to-server)
-        if (
-          !origin ||
-          allowedOrigins.includes("*") ||
-          allowedOrigins.includes(origin)
-        ) {
-          callback(null, true);
-        } else {
-          callback(new Error("Not allowed by CORS"));
-        }
-      },
-      credentials: true, // This MUST be true to allow the Authorization header
-      methods: ["GET", "POST", "PUT", "DELETE", "PATCH", "OPTIONS"],
-      allowedHeaders: [
-        "Content-Type",
-        "Authorization",
-        "X-Requested-With",
-        "Accept",
-        "Origin",
-      ],
-      optionsSuccessStatus: 200, // For legacy browser compatibility
-    };
-
-    this.app.use(cors(corsOptions));
-    // --- END: CORRECT CORS CONFIGURATION ---
-
-    console.log("CORS configured to allow requests from:", allowedOrigins);
+  async setupPlugins() {
+    await this.app.register(registerCorePlugins);
+    // Health
+    this.app.get('/health', async () => ({ success: true, message: 'OK' }));
   }
 
-  setupRoutes() {
-    // Health check routes (no auth needed)
-    this.app.use("/", healthRoutes);
-    
-    // API v1 routes
-    this.app.use("/api/v1", routes);
-    
-    
-    // 404 handler for unknown routes (Express 5 will forward thrown errors)
-    this.app.use((req, res) => {
-      res
-        .status(404)
-        .json({ success: false, message: `Cannot find ${req.originalUrl} on this server`, status: "fail" });
+  async setupRoutes() {
+    await this.app.register(fastifyRoutes, { prefix: '/api/v1' });
+    // 404 fallback
+    this.app.setNotFoundHandler((request, reply) => {
+      reply.code(404).send({ success: false, message: `Cannot find ${request.url} on this server`, status: 'fail' });
     });
   }
 
   setupErrorHandling() {
-    // Development error logging
-    if (process.env.NODE_ENV === "development") {
-      this.app.use((err, req, res, next) => {
-        console.error("Error caught in app.js:", err);
-        next(err);
+    // Fastify has its own error handling; add a hook for logging in dev
+    if (process.env.NODE_ENV === 'development') {
+      this.app.setErrorHandler((err, request, reply) => {
+        console.error('Error caught in app.js:', err);
+        reply.send(err);
       });
     }
-    // Global error handler
-    this.app.use(errorHandler);
   }
 
   async initializeCronJobs() {
@@ -204,22 +133,16 @@ class App {
   start(port) {
     return new Promise(async (resolve, reject) => {
       try {
-        await this.initialize(); // Initialize before starting server
-        this.server = this.app.listen(port, () => {
-          console.log(`Server running on port ${port}`);
-          console.log(`✅ Application started successfully!`);
-          console.log(`📊 Health check: http://localhost:${port}/health`);
-          console.log(`📚 API Docs: http://localhost:${port}/api-docs`);
-          console.log(`🚀 API Base: http://localhost:${port}/api/v1`);
-          resolve(this.server);
-        });
-
-        this.server.on("error", (error) => {
-          console.error("Server error:", error);
-          reject(error);
-        });
+        await this.initialize();
+        await this.app.listen({ port });
+        console.log(`Server running on port ${port}`);
+        console.log(`✅ Application started successfully!`);
+        console.log(`📊 Health check: http://localhost:${port}/health`);
+        console.log(`📚 API Docs JSON: http://localhost:${port}/api-docs.json`);
+        console.log(`🚀 API Base: http://localhost:${port}/api/v1`);
+        resolve(this.app);
       } catch (error) {
-        console.error("Error in start method:", error);
+        console.error('Error in start method:', error);
         reject(error);
       }
     });

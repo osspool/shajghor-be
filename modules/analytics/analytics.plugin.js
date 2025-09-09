@@ -1,16 +1,14 @@
-import express from 'express';
-import { withAuth } from '#routes/utils/compose.js';
 import permissions from '#config/permissions.js';
+import fp from 'fastify-plugin';
 import Booking from '#modules/booking/booking.model.js';
 import Transaction from '#modules/transaction/transaction.model.js';
 import Customer from '#modules/customer/customer.model.js';
 import Parlour from '#modules/parlour/parlour.model.js';
+// Use fastify.authenticate and fastify.authorize from auth plugin
 
-const router = express.Router();
-
-// Overview KPIs
-router.get('/overview', ...withAuth(permissions.analytics.overview), async (req, res, next) => {
-  try {
+async function analyticsPlugin(fastify, opts) {
+  const auth = [fastify.authenticate, fastify.authorize(...permissions.analytics.overview)];
+  fastify.get('/overview', { preHandler: auth }, async (request, reply) => {
     const today = new Date();
     const dayStart = new Date(Date.UTC(today.getUTCFullYear(), today.getUTCMonth(), today.getUTCDate()));
     const dayEnd = new Date(dayStart.getTime() + 24 * 60 * 60 * 1000);
@@ -39,7 +37,7 @@ router.get('/overview', ...withAuth(permissions.analytics.overview), async (req,
       Booking.countDocuments({ status: 'pending' }),
     ]);
 
-    res.status(200).json({
+    reply.code(200).send({
       success: true,
       data: {
         totals: {
@@ -57,13 +55,9 @@ router.get('/overview', ...withAuth(permissions.analytics.overview), async (req,
         },
       },
     });
-  } catch (error) {
-    next(error);
-  }
-});
+  });
+}
 
-
-
-export default router;
+export default fp(analyticsPlugin, { name: 'analytics-plugin' });
 
 
