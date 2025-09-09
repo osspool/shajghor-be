@@ -1,34 +1,33 @@
 // src/config/sections/google.config.js
-import { requiredEnv } from '../utils.js'; // Assume utils file created below
+import { warnIfMissing } from '../utils.js'; // Use warning instead of hard requirement
 
-// Validate the single encoded key is present
-requiredEnv("GOOGLE_CLOUD_KEY_ENCODED");
+// Warn if not present, but do not block app start
+warnIfMissing("GOOGLE_CLOUD_KEY_ENCODED");
 
 let googleServiceAccount = null;
 const encodedKey = process.env.GOOGLE_CLOUD_KEY_ENCODED;
 
-try {
-    const jsonString = Buffer.from(encodedKey, 'base64').toString('utf8');
-    googleServiceAccount = JSON.parse(jsonString);
+if (encodedKey) {
+    try {
+        const jsonString = Buffer.from(encodedKey, 'base64').toString('utf8');
+        const parsed = JSON.parse(jsonString);
 
-    // Basic validation of parsed JSON structure
-    if (!googleServiceAccount || typeof googleServiceAccount !== 'object' ||
-        !googleServiceAccount.private_key || !googleServiceAccount.client_email) {
-        console.error("FATAL ERROR: Decoded Google Service Account JSON is invalid or incomplete.");
-        googleServiceAccount = null; // Ensure it's null if invalid
-        process.exit(1);
+        // Basic validation of parsed JSON structure
+        if (parsed && typeof parsed === 'object' && parsed.private_key && parsed.client_email) {
+            googleServiceAccount = parsed;
+            console.log("Google Service Account credentials loaded.");
+        } else {
+            console.warn("GOOGLE_CLOUD_KEY_ENCODED is present but decoded JSON appears invalid or incomplete. Google integrations will be disabled.");
+        }
+    } catch (error) {
+        console.warn("Failed to decode or parse GOOGLE_CLOUD_KEY_ENCODED. Google integrations will be disabled.", error);
     }
-     console.log("Successfully decoded and parsed Google Service Account credentials.");
-
-} catch (error) {
-    console.error("FATAL ERROR: Failed to decode or parse GOOGLE_CLOUD_KEY_ENCODED:", error);
-    googleServiceAccount = null; // Ensure it's null on error
-    process.exit(1); // Exit as credentials are essential
+} else {
+    console.warn("GOOGLE_CLOUD_KEY_ENCODED not provided. Google integrations will be disabled.");
 }
-
 
 export default {
     google: {
-        serviceAccount: googleServiceAccount, // Use the parsed object
+        serviceAccount: googleServiceAccount, // Null when missing/invalid
     }
 };

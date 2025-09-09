@@ -1,7 +1,7 @@
-import { Parser as CsvParser } from 'json2csv';
 import fp from 'fastify-plugin';
-import ExcelJS from 'exceljs';
 import permissions from '#config/permissions.js';
+import { stringify as csvStringify } from 'csv-stringify/sync';
+import * as XLSX from 'xlsx';
 
 async function exportPlugin(fastify, opts) {
   const auth = async (request, reply) => {
@@ -18,8 +18,8 @@ async function exportPlugin(fastify, opts) {
     const criteria = filter ? JSON.parse(filter) : {};
     const fields = select ? select.split(',') : undefined;
     const docs = await Model.find(criteria).select(fields).lean();
-    const parser = new CsvParser({ fields: fields || Object.keys(docs[0] || {}) });
-    const csv = parser.parse(docs);
+    const headers = fields || Object.keys(docs[0] || {});
+    const csv = csvStringify(docs, { header: true, columns: headers });
     reply.header('Content-Type', 'text/csv');
     reply.header('Content-Disposition', `attachment; filename="${collection}.csv"`);
     reply.send(csv);
@@ -32,14 +32,13 @@ async function exportPlugin(fastify, opts) {
     const criteria = filter ? JSON.parse(filter) : {};
     const fields = select ? select.split(',') : undefined;
     const docs = await Model.find(criteria).select(fields).lean();
-    const workbook = new ExcelJS.Workbook();
-    const sheet = workbook.addWorksheet('Sheet1');
     const headers = fields || Object.keys(docs[0] || {});
-    sheet.addRow(headers);
-    docs.forEach((doc) => sheet.addRow(headers.map((h) => doc[h])));
+    const worksheet = XLSX.utils.json_to_sheet(docs, { header: headers });
+    const workbook = XLSX.utils.book_new();
+    XLSX.utils.book_append_sheet(workbook, worksheet, 'Sheet1');
+    const buffer = XLSX.write(workbook, { type: 'buffer', bookType: 'xlsx' });
     reply.header('Content-Type', 'application/vnd.openxmlformats-officedocument.spreadsheetml.sheet');
     reply.header('Content-Disposition', `attachment; filename="${collection}.xlsx"`);
-    const buffer = await workbook.xlsx.writeBuffer();
     reply.send(buffer);
   });
 }
