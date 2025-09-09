@@ -65,6 +65,8 @@ config/google-sheets-credentials.json
 /docs
 /docs/**/*
 
+/.package-lock.json
+
 # Environment variables
 .env
 .env.local
