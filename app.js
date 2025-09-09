@@ -134,12 +134,13 @@ class App {
     return new Promise(async (resolve, reject) => {
       try {
         await this.initialize();
-        await this.app.listen({ port });
-        console.log(`Server running on port ${port}`);
+        const host = process.env.HOST || '0.0.0.0';
+        await this.app.listen({ port, host });
+        console.log(`Server running on http://${host}:${port}`);
         console.log(`✅ Application started successfully!`);
-        console.log(`📊 Health check: http://localhost:${port}/health`);
-        console.log(`📚 API Docs JSON: http://localhost:${port}/api-docs.json`);
-        console.log(`🚀 API Base: http://localhost:${port}/api/v1`);
+        console.log(`📊 Health check: http://${host}:${port}/health`);
+        console.log(`📚 API Docs JSON: http://${host}:${port}/api-docs.json`);
+        console.log(`🚀 API Base: http://${host}:${port}/api/v1`);
         resolve(this.app);
       } catch (error) {
         console.error('Error in start method:', error);
