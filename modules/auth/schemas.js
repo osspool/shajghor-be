@@ -7,6 +7,7 @@ export const registerBody = {
   properties: {
     name: { type: 'string', minLength: 1 },
     email: { type: 'string', format: 'email' },
+    phone: { type: 'string' },
     password: { type: 'string', minLength: 6 },
     roles: { type: 'array', items: { type: 'string', enum: ['superadmin','admin','manager','hr','employee','user'] } },
   },
